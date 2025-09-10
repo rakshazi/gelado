@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches: [ "main" ]
+permissions:
+  checks: write
+  contents: write
+  packages: write
+  pull-requests: read
+jobs:
+  deploy:
+    name: Deploy to BunnyCDN
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/etkecc/base/build:latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build and Publish
+        run: |
+          echo "${{ secrets.BUNNY_CONFIG }}" > bunny-config.yaml
+          bunny-upload -c bunny-config.yaml
