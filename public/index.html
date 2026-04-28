@@ -12,16 +12,21 @@
     <link rel="manifest" href="/site.webmanifest" />
     <style>
       :root{
-        --bg: #f5ddbe;      /* page / image background */
+        --bg: #f5ddbe;
         --bubble-bg: #ffffff;
         --bubble-text: #5a3740;
-        --gap: 1px;        /* gap between image and bubble */
+        --gap: 1px;
+        --progress-color: #e8a0b0;
+        --interval: 4000;
       }
 
       html,body{
         height:100%;
         margin:0;
         background:var(--bg);
+        /* subtle artisan-paper dot texture */
+        background-image: radial-gradient(circle, rgba(90,55,64,0.07) 1px, transparent 1px);
+        background-size: 22px 22px;
         display:flex;
         align-items:center;
         justify-content:center;
@@ -36,7 +41,7 @@
       .container{
         position:relative;
         display:inline-block;
-        overflow:visible; /* ensure tail can be visible outside bubble */
+        overflow:visible;
       }
 
       #mascot{
@@ -45,6 +50,15 @@
         width: min(44vw, 320px);
         height:auto;
         animation: float 3.6s ease-in-out infinite;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        transform-origin: center bottom;
+        will-change: transform;
+      }
+
+      #mascot.squashing {
+        animation: squash 0.56s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
       }
 
       @keyframes float{
@@ -52,6 +66,62 @@
         50%  { transform: translateY(-8px); }
         100% { transform: translateY(0); }
       }
+
+      @keyframes squash {
+        0%   { transform: scaleX(1)    scaleY(1)    translateY(0); }
+        12%  { transform: scaleX(1.32) scaleY(0.68) translateY(8px); }
+        30%  { transform: scaleX(0.80) scaleY(1.26) translateY(-16px); }
+        48%  { transform: scaleX(1.12) scaleY(0.91) translateY(4px); }
+        64%  { transform: scaleX(0.95) scaleY(1.07) translateY(-5px); }
+        78%  { transform: scaleX(1.04) scaleY(0.97) translateY(1px); }
+        90%  { transform: scaleX(0.99) scaleY(1.01); }
+        100% { transform: scaleX(1)    scaleY(1)    translateY(0); }
+      }
+
+      /* particle burst */
+      .particle {
+        position: fixed;
+        pointer-events: none;
+        z-index: 9999;
+        animation: particle-fly 0.65s cubic-bezier(0.15, 0.85, 0.35, 1) forwards;
+        will-change: transform, opacity;
+        line-height: 1;
+      }
+      @keyframes particle-fly {
+        0%   { transform: translate(-50%, -50%) scale(1.3) rotate(0deg); opacity: 1; }
+        55%  { opacity: 1; }
+        100% { transform: translate(calc(-50% + var(--px)), calc(-50% + var(--py))) scale(0.15) rotate(var(--rot)); opacity: 0; }
+      }
+
+      /* expanding impact ring */
+      .impact-ring {
+        position: fixed;
+        border-radius: 50%;
+        border: 3px solid rgba(232,160,176,0.75);
+        pointer-events: none;
+        z-index: 9998;
+        transform: translate(-50%, -50%);
+        animation: ring-expand 0.5s ease-out forwards;
+      }
+      @keyframes ring-expand {
+        0%   { width:  50px; height:  50px; opacity: 1; }
+        100% { width: 240px; height: 240px; opacity: 0; }
+      }
+
+      /* tap hint */
+      #tap-hint {
+        position: absolute;
+        bottom: -28px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 0.72rem;
+        color: rgba(90,55,64,0.45);
+        white-space: nowrap;
+        pointer-events: none;
+        transition: opacity 0.6s ease;
+        letter-spacing: 0.02em;
+      }
+      #tap-hint.gone { opacity: 0; }
 
       /* comic bubble */
       .bubble{
@@ -63,21 +133,21 @@
         width: 260px;
         background: var(--bubble-bg);
         color: var(--bubble-text);
-        padding: 12px 14px;
-        border-radius: 16px;
-        box-shadow: 0 8px 22px rgba(90,55,64,0.08);
+        padding: 12px 14px 10px;
+        border-radius: 18px;
+        box-shadow: 0 6px 24px rgba(90,55,64,0.13), 0 1px 4px rgba(90,55,64,0.07);
         font-size: 0.95rem;
-        line-height: 1.25;
-        transition: opacity .28s ease, transform .18s ease, left .2s ease, top .2s ease;
+        line-height: 1.3;
+        transition: opacity .25s ease, left .2s ease, top .2s ease;
         opacity: 1;
         pointer-events: none;
-        overflow: visible; /* so SVG tail remains visible */
-        border: 1px solid rgba(0,0,0,0.03);
+        overflow: visible;
+        border: 1.5px solid rgba(232,160,176,0.35);
       }
       .bubble::before {
         content: '';
         position: absolute;
-        top: 50%; /* moved down to match bubble vertical shift */
+        top: 50%;
         left: -29px;
         width: 30px;
         height: 20px;
@@ -85,46 +155,139 @@
         clip-path: polygon(100% 0, 0 50%, 100% 100%);
       }
 
-      .bubble.hidden{ opacity: 0; }
+      /* progress bar at bottom of bubble */
+      .bubble-progress {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        width: 100%;
+        background: rgba(232,160,176,0.18);
+        border-radius: 0 0 18px 18px;
+        overflow: hidden;
+      }
+      .bubble-progress-bar {
+        height: 100%;
+        width: 100%;
+        background: var(--progress-color);
+        transform-origin: left center;
+        transform: scaleX(1);
+        border-radius: 0 0 18px 18px;
+      }
+      .bubble-progress-bar.running {
+        animation: drainBar var(--interval, 4000ms) linear forwards;
+      }
+      @keyframes drainBar {
+        from { transform: scaleX(1); }
+        to   { transform: scaleX(0); }
+      }
 
-      /* When bubble is above the mascot, place the tail centered at bubble's bottom and flip it */
-      .bubble.bubble--above {
-        left: 50%;
-        transform: translate(-50%, -120%); /* move above mascot */
-        top: auto;
+      .bubble.hidden{ opacity: 0; }
+      .bubble.pop {
+        animation: bubblePop .22s ease forwards;
       }
-      .bubble.bubble--above::before {
-        left: calc(50% - 15px); /* center tail */
-        top: -20px; /* use custom property for tail Y position */
-        transform: rotate(90deg); /* flip the tail */
+      @keyframes bubblePop {
+        0%   { transform: translateY(-50%) scale(0.93); opacity: 0; }
+        70%  { transform: translateY(-50%) scale(1.03); opacity: 1; }
+        100% { transform: translateY(-50%) scale(1);    opacity: 1; }
       }
+
       .bubble.bubble--above {
         left: calc(50% - 14px);
         top: 100%;
         transform: translateY(0) rotate(180deg);
       }
+      .bubble.bubble--above::before {
+        left: calc(50% - 15px);
+        top: -20px;
+        transform: rotate(90deg);
+      }
       .bubble.bubble--above span {
         transform: translateY(0) rotate(180deg);
       }
+      .bubble.bubble--above.pop {
+        animation: bubblePopAbove .22s ease forwards;
+      }
+      @keyframes bubblePopAbove {
+        0%   { transform: rotate(180deg) scale(0.93); opacity: 0; }
+        70%  { transform: rotate(180deg) scale(1.03); opacity: 1; }
+        100% { transform: rotate(180deg) scale(1);    opacity: 1; }
+      }
 
-      /* keep layout stable */
       #joke { min-height: 2.5em; display:block; }
+
       @media (max-width:420px){
         #mascot { width: 200px; }
         .bubble { max-width: 210px; font-size: .88rem; }
+      }
+
+      /* ---- rage mode ---- */
+      #mascot.raging {
+        animation: rage-shake 0.06s linear infinite;
+        filter: drop-shadow(0 0 10px rgba(255,80,50,0.6)) drop-shadow(0 0 28px rgba(255,120,60,0.28));
+      }
+
+      @keyframes rage-shake {
+        0%   { transform: rotate(-4deg) translateX(-5px) scaleY(1.02); }
+        25%  { transform: rotate(4deg)  translateX(5px)  scaleY(0.98); }
+        50%  { transform: rotate(-3deg) translateX(-4px) scaleY(1.01); }
+        75%  { transform: rotate(3deg)  translateX(4px)  scaleY(0.99); }
+        100% { transform: rotate(-4deg) translateX(-5px) scaleY(1.02); }
+      }
+
+      body.rage-mode {
+        background-color: #f5c5bc;
+        transition: background-color 0.35s ease;
+      }
+      body:not(.rage-mode) {
+        transition: background-color 1.4s ease;
+      }
+
+      body.rage-mode .bubble {
+        background: #fff2f0;
+        border-color: rgba(210,80,70,0.4);
+        color: #6e1f1f;
+        box-shadow: 0 6px 24px rgba(200,60,50,0.18), 0 1px 4px rgba(200,60,50,0.1);
+        transition: background 0.3s, border-color 0.3s, color 0.3s, box-shadow 0.3s;
+      }
+      body.rage-mode .bubble::before { background: #fff2f0; }
+      body.rage-mode .bubble-progress-bar { background: #d94040; }
+      body.rage-mode #tap-hint { opacity: 0; }
+
+      /* anger puffs float up and fade */
+      .anger-puff {
+        position: fixed;
+        pointer-events: none;
+        z-index: 9999;
+        line-height: 1;
+        animation: anger-float 2.2s cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+      }
+      @keyframes anger-float {
+        0%   { transform: translate(-50%, -50%) scale(0.4);  opacity: 0; }
+        12%  { transform: translate(-50%, -50%) scale(1.25); opacity: 1; }
+        70%  { transform: translate(calc(-50% + var(--dx)), calc(-50% - 50px)) scale(1.05); opacity: 1; }
+        100% { transform: translate(calc(-50% + var(--dx)), calc(-50% - 75px)) scale(0.75) rotate(var(--rot)); opacity: 0; }
+      }
+
+      /* rage impact ring: red tint */
+      .impact-ring.rage {
+        border-color: rgba(220,70,50,0.8);
       }
     </style>
   </head>
   <body>
     <div class="container" id="container">
       <img id="mascot" src="mascot.320x320.webp" alt="Gelatti" />
+      <div id="tap-hint">tap me 🍦</div>
 
-      <!-- Speech bubble (default text acts as no-JS fallback) -->
       <div class="bubble" id="bubble" role="status" aria-live="polite">
         <span id="joke">
           Hey. You weren't on the guest list.
           But fine — take a scoop. Don't tell anyone I bribed you with gelato 🍨
         </span>
+        <div class="bubble-progress">
+          <div class="bubble-progress-bar" id="progressBar"></div>
+        </div>
       </div>
 
       <div style="text-align: center">
@@ -133,36 +296,35 @@
     </div>
 
     <script>
-      /* ---- jokes list ---- */
       const jokes = [
         "Hey. You weren't on the guest list. But fine — take a scoop. Don't tell anyone I bribed you with gelato 🍨",
         "You look lost, sweetie. Want me to stab you... with a waffle cone? 🍦",
         "Hey stranger, want a brain freeze and emotional damage in one scoop? 🍨",
-        "Come closer… I promise the sprinkles aren’t poisoned. Probably. 🌸",
+        "Come closer… I promise the sprinkles aren't poisoned. Probably. 🌸",
         "I churned this gelato with pure malice and 20% love. ❤️",
         "You scream, I scream, everyone screams… for different reasons. 🍧",
         "Careful, my gelato bites back. Hard. 🐾",
-        "Don’t run away, dessert tastes better when you’re terrified. 😈",
-        "You’re not on the guest list, but I’ll bribe you with sorbet. 🍋",
+        "Don't run away, dessert tastes better when you're terrified. 😈",
+        "You're not on the guest list, but I'll bribe you with sorbet. 🍋",
         "Every scoop I serve steals a tiny piece of your soul. 💀",
         "This gelato is 90% sugar, 10% chaos. 🌀",
         "Want some sprinkles with your impending doom? 🌈",
-        "Gelato so good you’ll forget your safe word. 😉",
+        "Gelato so good you'll forget your safe word. 😉",
         "The cone is crunchy, your fate is crunchier. 🪓",
-        "You can’t escape… I already pre-scooped your destiny. ❄️",
+        "You can't escape… I already pre-scooped your destiny. ❄️",
         "If you drop it, I drop you. 🔪",
         "Gelato therapy: first bite free, consequences extra. 💸",
-        "You’re cute… almost cute enough for free toppings. Almost. 😏",
+        "You're cute… almost cute enough for free toppings. Almost. 😏",
         "Let me sweeten your day… aggressively. 💥",
         "The ice cream truck plays my battle theme. 🎵",
         "This gelato pairs well with regret. 🍫",
         "Do you prefer vanilla, chocolate, or mild intimidation? 🍦",
-        "It’s okay, I only hex people who order sorbet. 🧙‍♀️",
+        "It's okay, I only hex people who order sorbet. 🧙‍♀️",
         "Eat now, run later… if you can. 🏃‍♂️",
         "Every lick brings you closer to danger. 🐉",
         "Cone or cup? Wrong answer. ☠️",
         "You thought you came for dessert, but dessert came for you. 🔮",
-        "Don’t mind the screams from the freezer. They’re just… cherries. 🍒",
+        "Don't mind the screams from the freezer. They're just… cherries. 🍒",
         "If you finish the triple scoop, you unlock my final form. 🦋",
         "The sprinkles know your secrets. 🤫",
         "Say 'ahh'… forever. 🌌",
@@ -239,17 +401,114 @@
         "I came with sprinkles and an agenda. 🌈📝",
         "Say 'ahh'... for a reasonable amount of time. 🌬️🍨",
         "If you hesitate, I curate. 🖼️🥄",
-        "I'm the plot twist your sweet tooth ordered. 🔀🍧"
+        "I'm the plot twist your sweet tooth ordered. 🔀🍧",
+        "The mango sorbet is seasonal. Like your optimism. 🥭😬",
+        "I don't do substitutions. I do realignments. 🔄🍨",
+        "My hazelnut will find you. Eventually. 🌰👀",
+        "This queue moves at the speed of me. 🐌⏱️",
+        "Fresh batch, zero patience for indecision. ⚡🥄",
+        "Your order is ready. Your excuses are not. 📋🍦",
+        "I accept cash, card, and sincere apologies. 💳🙏",
+        "That's not a flavor. That's a cry for help. 🆘🍧",
+        "You smell like someone who wants pistachio. I can work with that. 🌰✨",
+        "I've been scooping since before your problems started. Coincidence? 🥄🤔",
+        "Yes, that's the portion size. No, I'm not sorry. 📏😤",
+        "You're the third person today to ask for 'something not too sweet.' Bold. 🙄🍨",
+        "Raspberry. It stains. Just like the memories. 🫐💔",
+        "The sign says 'artisanal.' The vibe says 'watch your step.' 🎨⚠️",
+        "I make it from scratch. Your excuse is store-bought. 🏪😶",
+        "Free samples are for the brave. You look… interesting. 🦁🥄",
+        "Extra sprinkles cost nothing. Sass is already included. 🌈💬",
+        "You thought this was just dessert? Precious. 🥹🍨",
+        "One scoop is plenty. Two is character development. Three is a whole arc. 📖🍦",
+        "Lick faster. The universe is judging your pace. ⚡🌍",
+        "I'm closing in 20 minutes. Your crisis is noted. ⏰😐",
+        "Regular customers get smiles. First-timers get this look. 🔍😶",
+        "The nutella swirl is not a personality. Though it could be. 🌀🧠",
+        "I serve gelato. Not emotional support. Same price though. 🍦💭",
+        "I have two speeds: graceful and gone. Pick faster. 🌬️🍨",
+        "Eat it with purpose. Or I'll assign you one. 🎯🥄",
+        "Your hands are already sticky. We're past introductions. 🤝🍨",
+        "Hot outside? Cry about it somewhere else, then come back for sorbet. ☀️😭",
+        "You look like you need two scoops and a long think. 🍦🪑",
+        "I don't judge. But the gelato does. And it already has. 🍨⚖️",
+        "This is my craft, my calling, and my mild obsession. Eat accordingly. 🎨🍦",
+        "The cone is not a vessel. It's a test. 🍦🔬",
+        "Strawberry: deceptively sweet, holds a grudge. Much like me. 🍓😌",
+        "You're not here for gelato. You're here for the experience of being judged by gelato. 🍨🎓",
+        "I gave you the good scoop. Don't make me regret it. 🥄😑",
+        "This flavor? It's called 'I told you so.' You'll love it. 😏🍧",
+        "Eat it before it melts. Life advice, also. 🕰️🫠",
+        "Did I ask? No. Did I add extra? Also no. We're even. 🤝🍦",
+        "My patience is artisanal. Very small batch. 🧪😬",
+        "Come for the gelato. Stay because I'm blocking the exit. 🚪🍨"
       ];
 
-      const bubble = document.getElementById('bubble');
-      const jokeEl = document.getElementById('joke');
-      const mascot = document.getElementById('mascot');
-      const container = document.getElementById('container');
+      const rageJokes = [
+        "OKAY. Who gave you all that energy?! Put it DOWN. 😤🍦",
+        "I am soft. I am cold. I do NOT deserve this. 🍨😭",
+        "SIR. MA'AM. THEY/THEM. P l e a s e. 🙏😤",
+        "I'm filing a formal complaint with the sprinkle committee. 🌈📋",
+        "My therapist is going to hear about this. 🛋️😤",
+        "One more tap and I'm calling the waffle police. 🧇👮",
+        "BREATHE. The gelato isn't going anywhere. Unlike my patience. 🧊💨",
+        "You are distressing the gelato. The gelato is very distressed. 😩🍨",
+        "I have feelings too. Deep, frozen, inconvenient feelings. 🧊💔",
+        "The audacity. The sheer, caffeinated, UNHINGED audacity. ☕😤",
+        "I'm going to need you to use your inside hands. 🤲😑",
+        "Take a breath. Take a walk. Come back when you're a delight again. 🚶‍♂️🍦",
+        "This is harassment. Delicious, unwanted harassment. 🍦⚠️",
+        "I feel seen. Aggressively, violently seen. Please stop. 👀💥",
+        "I am a CERTIFIED artisanal gelato. Not a stress toy. 😤🍨",
+        "Tap me one more time. I. DARE. You. 🔪🍦",
+        "I have eyes everywhere. Also sprinkles. Both are watching. 👀🌈",
+        "Have you tried gelato? Oh wait. That's me. I'm having a moment. 🆘🍨",
+        "I am vibrating at a frequency that is NOT on the menu. 📡😤",
+        "No toppings for you. For a whole minute. I mean it this time. 😤🚫",
+        "Congratulations! You unlocked my trauma response. Happy? 🎉😤🍦",
+        "I am THIS close to charging a therapy surcharge. 💸🛋️",
+        "My sprinkles are having a panic attack. Are YOU happy now?! 🌈😰",
+        "Deep breaths. We're all going through it. Some of us are gelato. 🧊🌬️",
+        "This is why I don't do loyalty cards. THIS. 😤🎟️",
+        "I've seen things. Cold, delicious, traumatizing things. Slow. Down. 🍨👁️",
+        "I am going to need you to STOP. And also try the pistachio. 💚😤",
+        "My scoop hand is SHAKING. Are you proud of yourself? 🥄😡",
+        "I came here to serve gelato and feel respected. I'm one for two. 📊😤",
+        "Bold of you to assault a small frozen dessert on a Tuesday. 📅😤🍨",
+      ];
 
-      let lastIndex = -1;
+      const INTERVAL           = 4000;
+      const RAGE_TAP_COUNT     = 5;
+      const RAGE_TAP_WINDOW    = 1800;  /* ms: qualifying window */
+      const RAGE_COOLDOWN      = 7000;  /* ms: idle before exiting rage */
+      const RAGE_JOKE_INTERVAL = 2800;  /* ms: faster joke cycle in rage mode */
 
-      /* set the contact link to a mailto: link. Why so hard? To prevent spam bots from harvesting it. */
+      const bubble      = document.getElementById('bubble');
+      const jokeEl      = document.getElementById('joke');
+      const mascot      = document.getElementById('mascot');
+      const container   = document.getElementById('container');
+      const progressBar = document.getElementById('progressBar');
+      const tapHint     = document.getElementById('tap-hint');
+
+      let jokeIndex      = 0;
+      let rageJokeIndex  = 0;
+      let intervalId     = null;
+      let hintDismissed  = false;
+      let tapTimes       = [];
+      let rageMode       = false;
+      let rageCooldownId = null;
+      let ragePuffId     = null;
+
+      function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+      }
+
+      shuffle(jokes);
+      shuffle(rageJokes);
+
       function setContactLink() {
         const contactEl = document.getElementById('contact');
         const domain = window.location.hostname;
@@ -257,89 +516,222 @@
           contactEl.href = `javascript:alert('Hey, sweetie. Not your flavor. Put the spoon down and scoot. 🍨💅')`;
           return;
         }
-        const contactValue = window.location.hostname.split('.')[0] + '@' + window.location.hostname
-
-        contactEl.href = `mailto:${contactValue}`;
+        contactEl.href = `mailto:${window.location.hostname.split('.')[0]}@${window.location.hostname}`;
       }
 
-      /* pick a random joke, fade out/in, reposition bubble after text change */
+      function restartProgressBar(duration) {
+        progressBar.classList.remove('running');
+        void progressBar.offsetWidth;
+        progressBar.style.setProperty('animation-duration', (duration ?? INTERVAL) + 'ms');
+        progressBar.classList.add('running');
+      }
+
       function setRandomJoke() {
-        let idx;
-        do {
-          idx = Math.floor(Math.random() * jokes.length);
-        } while (idx === lastIndex && jokes.length > 1);
-        lastIndex = idx;
+        if (jokeIndex >= jokes.length) { shuffle(jokes); jokeIndex = 0; }
+        const text = jokes[jokeIndex++];
 
         bubble.classList.add('hidden');
+        bubble.classList.remove('pop');
+
         setTimeout(() => {
-          jokeEl.textContent = jokes[idx];
-          positionBubble(); // reposition after content change (bubble size may change)
+          jokeEl.textContent = text;
+          positionBubble();
           bubble.classList.remove('hidden');
-        }, 280);
+          bubble.classList.add('pop');
+          restartProgressBar();
+        }, 250);
       }
 
-      /* Position the bubble and tail to point to mascot's mouth.
-   If there is not enough room to the right, place bubble above the mascot
-   and flip the tail downward.
-       */
+      const PARTICLE_EMOJIS = ['🍦','🍧','🍨','✨','⭐','🌸','🍒','💫','🌈','🎉','🍬','🫧','🍓','💥'];
+
+      function spawnParticles(isRage = false) {
+        const rect  = mascot.getBoundingClientRect();
+        const cx    = rect.left + rect.width  * 0.5;
+        const cy    = rect.top  + rect.height * 0.38;
+        const pool  = isRage
+          ? [...PARTICLE_EMOJIS, ...ANGER_EMOJIS]
+          : PARTICLE_EMOJIS;
+        const count = isRage ? 14 : 11;
+
+        for (let i = 0; i < count; i++) {
+          const el = document.createElement('span');
+          el.className = 'particle';
+          const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.9;
+          const dist  = (isRage ? 70 : 55) + Math.random() * 95;
+          el.style.setProperty('--px',  (Math.cos(angle) * dist) + 'px');
+          el.style.setProperty('--py',  (Math.sin(angle) * dist) + 'px');
+          el.style.setProperty('--rot', (Math.random() * 500 - 250) + 'deg');
+          el.style.left           = cx + 'px';
+          el.style.top            = cy + 'px';
+          el.style.fontSize       = (0.9 + Math.random() * 0.9) + 'rem';
+          el.style.animationDelay = (Math.random() * 70) + 'ms';
+          el.textContent = pool[Math.floor(Math.random() * pool.length)];
+          document.body.appendChild(el);
+          el.addEventListener('animationend', () => el.remove());
+        }
+
+        const ring = document.createElement('div');
+        ring.className = 'impact-ring' + (isRage ? ' rage' : '');
+        ring.style.left = cx + 'px';
+        ring.style.top  = cy + 'px';
+        document.body.appendChild(ring);
+        ring.addEventListener('animationend', () => ring.remove());
+      }
+
+      /* ---- rage mode ---- */
+
+      const ANGER_EMOJIS = ['💢','😤','🔥','⚡','💥','😡','🌋','😾','🫨','👿'];
+
+      function spawnAngerPuff() {
+        const rect = mascot.getBoundingClientRect();
+        const el   = document.createElement('span');
+        el.className = 'anger-puff';
+        el.textContent = ANGER_EMOJIS[Math.floor(Math.random() * ANGER_EMOJIS.length)];
+        const cx = rect.left + rect.width  * (0.15 + Math.random() * 0.7);
+        const cy = rect.top  + rect.height * (0.05 + Math.random() * 0.55);
+        el.style.left = cx + 'px';
+        el.style.top  = cy + 'px';
+        el.style.fontSize = (1.8 + Math.random() * 1.0) + 'rem';
+        el.style.setProperty('--dx',  (Math.random() * 60 - 30) + 'px');
+        el.style.setProperty('--rot', (Math.random() * 60 - 30) + 'deg');
+        document.body.appendChild(el);
+        el.addEventListener('animationend', () => el.remove());
+      }
+
+      function showRageJoke() {
+        if (rageJokeIndex >= rageJokes.length) { shuffle(rageJokes); rageJokeIndex = 0; }
+        const text = rageJokes[rageJokeIndex++];
+
+        bubble.classList.add('hidden');
+        bubble.classList.remove('pop');
+        setTimeout(() => {
+          jokeEl.textContent = text;
+          positionBubble();
+          bubble.classList.remove('hidden');
+          bubble.classList.add('pop');
+          restartProgressBar(RAGE_JOKE_INTERVAL);
+        }, 220);
+      }
+
+      function enterRageMode() {
+        if (rageMode) return;
+        rageMode = true;
+        document.body.classList.add('rage-mode');
+        mascot.classList.remove('squashing');
+        mascot.classList.add('raging');
+        clearInterval(intervalId);
+        showRageJoke();
+        intervalId = setInterval(showRageJoke, RAGE_JOKE_INTERVAL);
+        ragePuffId = setInterval(spawnAngerPuff, 650);
+      }
+
+      function exitRageMode() {
+        if (!rageMode) return;
+        rageMode = false;
+        document.body.classList.remove('rage-mode');
+        mascot.classList.remove('raging');
+        clearInterval(ragePuffId);
+        ragePuffId = null;
+        clearInterval(intervalId);
+        setRandomJoke();
+        intervalId = setInterval(setRandomJoke, INTERVAL);
+      }
+
+      function extendRageCooldown() {
+        clearTimeout(rageCooldownId);
+        rageCooldownId = setTimeout(exitRageMode, RAGE_COOLDOWN);
+      }
+
+      /* ---- squeezeAndJoke ---- */
+
+      function squeezeAndJoke() {
+        if (!hintDismissed) {
+          hintDismissed = true;
+          tapHint.classList.add('gone');
+        }
+
+        /* rage detection */
+        const now = Date.now();
+        tapTimes.push(now);
+        tapTimes = tapTimes.filter(t => now - t < RAGE_TAP_WINDOW);
+
+        if (tapTimes.length >= RAGE_TAP_COUNT || rageMode) {
+          if (!rageMode) enterRageMode();
+          extendRageCooldown();
+          spawnParticles(true);
+          spawnAngerPuff();
+          return;
+        }
+
+        /* normal tap */
+        spawnParticles(false);
+
+        mascot.classList.remove('squashing');
+        mascot.classList.remove('raging');
+        void mascot.offsetWidth;
+        mascot.classList.add('squashing');
+        mascot.addEventListener('animationend', () => {
+          mascot.classList.remove('squashing');
+          if (rageMode) mascot.classList.add('raging');
+        }, { once: true });
+
+        clearInterval(intervalId);
+        setRandomJoke();
+        intervalId = setInterval(setRandomJoke, INTERVAL);
+      }
+
       function positionBubble() {
         const mRect = mascot.getBoundingClientRect();
         const cRect = container.getBoundingClientRect();
 
-        // relative mouth Y inside the image (tweak this if tail needs vertical adjustment)
-        const mouthRel = 0.62; // 0..1 (0 = top, 1 = bottom)
+        const mouthRel = 0.62;
         const mouthY = mRect.top - cRect.top + mouthRel * mRect.height;
 
-        // default bubble to the right of image
         const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 20;
         let left = (mRect.right - cRect.left) + gap;
-        let top = mouthY - bubble.offsetHeight * 0.5;
+        let top  = mouthY - bubble.offsetHeight * 0.5;
 
-        // clamp top so bubble doesn't go outside container (a little margin)
         const minTop = 6;
         const maxTop = window.innerHeight - cRect.top - 6 - bubble.offsetHeight;
         if (top < minTop) top = minTop;
         if (top > maxTop) top = maxTop;
 
-        // Check if bubble overflows viewport on the right; if so, place it above the mascot
         const willOverflowRight = (left + bubble.offsetWidth + 260) > (window.innerWidth - 8);
         if (willOverflowRight) {
-          // place above, centered horizontally relative to mascot
           bubble.classList.add('bubble--above');
           const centeredLeft = (mRect.left - cRect.left) + (mRect.width / 2) - (bubble.offsetWidth / 2);
           bubble.style.left = `${Math.max(8, centeredLeft)}px`;
-          // place above mascot with small gap
-          bubble.style.top = `${(mRect.top - cRect.top) - bubble.offsetHeight - 12}px`;
-          // tail: position near bottom center of bubble
-          const tailY = bubble.offsetHeight - 6; // a little above bottom edge
-          bubble.style.setProperty('--tail-top', `${tailY}px`);
+          bubble.style.top  = `${(mRect.top - cRect.top) - bubble.offsetHeight - 12}px`;
+          bubble.style.setProperty('--tail-top', `${bubble.offsetHeight - 6}px`);
         } else {
           bubble.classList.remove('bubble--above');
           bubble.style.left = `${left}px`;
-          bubble.style.top = `${top}px`;
-          // compute tail Y within bubble (so it points to mouth position)
-          const tailY = (mouthY - top);
-          // clamp inside bubble
-          const clampedTailY = Math.max(8, Math.min(bubble.offsetHeight - 8, tailY));
+          bubble.style.top  = `${top}px`;
+          const clampedTailY = Math.max(8, Math.min(bubble.offsetHeight - 8, mouthY - top));
           bubble.style.setProperty('--tail-top', `${clampedTailY}px`);
         }
       }
 
-      /* attach events */
+      mascot.addEventListener('click', squeezeAndJoke);
+      mascot.addEventListener('touchend', (e) => { e.preventDefault(); squeezeAndJoke(); });
+
       window.addEventListener('resize', positionBubble);
       window.addEventListener('scroll', positionBubble);
       window.addEventListener('orientationchange', positionBubble);
       window.addEventListener('load', setContactLink);
 
-      /* On image load or if cached already, position and start jokes */
       function start() {
         positionBubble();
         setRandomJoke();
-        setInterval(setRandomJoke, 4000);
+        intervalId = setInterval(setRandomJoke, INTERVAL);
+
+        /* fade out the tap hint after 6 seconds if never tapped */
+        setTimeout(() => {
+          if (!hintDismissed) tapHint.classList.add('gone');
+        }, 6000);
       }
 
       if (mascot.complete) {
-        // image already loaded from cache
         start();
       } else {
         mascot.addEventListener('load', start);
